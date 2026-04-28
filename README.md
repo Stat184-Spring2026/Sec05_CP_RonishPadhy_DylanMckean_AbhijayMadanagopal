@@ -1,6 +1,6 @@
 # NFL Combine Performance and Player Success
 
-This project explores NFL Combine data from 2006 to 2026 to examine patterns in player athletic testing. The goal is to see whether Combine performance is related to position and actual NFL performance.
+This project explores NFL Combine data from 2016 to 2026 to examine patterns in player athletic testing. The goal is to see whether Combine performance is related to position and actual NFL performance.
 
 ## Overview
 
