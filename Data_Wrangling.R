@@ -10,12 +10,22 @@ library(ggplot2)
 
 # Step 2: Load Data ----
 
+Combine_2016 <- load_combine(2016)
+Combine_2017 <- load_combine(2017)
+Combine_2018 <- load_combine(2018)
+Combine_2019 <- load_combine(2019)
+Combine_2020 <- load_combine(2020)
 Combine_2021 <- load_combine(2021)
 Combine_2022 <- load_combine(2022)
 Combine_2023 <- load_combine(2023)
 Combine_2024 <- load_combine(2024)
 Combine_2025 <- load_combine(2025)
 
+Player_Stats_2016 <- load_player_stats(2016)
+Player_Stats_2017 <- load_player_stats(2017)
+Player_Stats_2018 <- load_player_stats(2018)
+Player_Stats_2019 <- load_player_stats(2019)
+Player_Stats_2020 <- load_player_stats(2020)
 Player_Stats_2021 <- load_player_stats(2021)
 Player_Stats_2022 <- load_player_stats(2022)
 Player_Stats_2023 <- load_player_stats(2023)
@@ -26,6 +36,11 @@ Player_Stats_2025 <- load_player_stats(2025)
 
 # Stack all combine years into one data frame
 Combine_All <- bind_rows(
+  Combine_2016,
+  Combine_2017,
+  Combine_2018,
+  Combine_2019,
+  Combine_2020,
   Combine_2021,
   Combine_2022,
   Combine_2023,
@@ -37,9 +52,9 @@ Combine_All <- bind_rows(
 # faster and more agile so a declining average means improvement.
 Combine_RB_Avg <- Combine_All |>
   # Filter out all other positions besides running back
-  filter(pos == "RB") |> 
-  # Drop rows with no three cone performance  
-  filter(!is.na(cone)) |> 
+  filter(pos == "RB") |>
+  # Drop rows with no three cone performance
+  filter(!is.na(cone)) |>
   group_by(season) |>
   summarise(
     # Find average time for three cone drill
@@ -50,6 +65,11 @@ Combine_RB_Avg <- Combine_All |>
 
 # Combine all player stats data frames into one
 Player_Stats_All <- bind_rows(
+  Player_Stats_2016,
+  Player_Stats_2017,
+  Player_Stats_2018,
+  Player_Stats_2019,
+  Player_Stats_2020,
   Player_Stats_2021,
   Player_Stats_2022,
   Player_Stats_2023,
@@ -66,7 +86,7 @@ RB_YPG_Avg <- Player_Stats_All |>
     total_rushing = sum(rushing_yards, na.rm = TRUE),
     .groups = "drop"
   ) |>
-  # Exclude players with almost no carries 
+  # Exclude players with almost no carries
   # This avoids inflating YPG with backups who played 1 snap
   filter(games_played >= 3) |>
   # Calculate yard per game
@@ -108,20 +128,20 @@ TCD_RBYPG_Plot <- ggplot(TCD_RBYPG_Data, aes(x = season)) +
   geom_point(aes(y = ypg_scaled, color = "Avg RB Rush YPG"),
              size = 3) +
   scale_y_continuous(
-    name = "Avg 3-Cone Drill Time (seconds) — lower is faster",
+    name = "Avg 3-Cone Drill Time (seconds)",
     sec.axis = sec_axis(
       transform = ~ (. - shift) / scale_factor,
       name = "Avg RB Rushing Yards Per Game"
     )
   ) +
-  scale_x_continuous(breaks = 2021:2025) +
+  scale_x_continuous(breaks = 2016:2025) +
   scale_color_manual(
     values = c("Avg 3-Cone (sec)" = "#003f5c",
-               "Avg RB Rush YPG"  = "#ff6361")
+               "Avg RB Rush YPG" = "#ff6361")
   ) +
   labs(
     title = "NFL Combine RB 3-Cone Drill vs. RB Rushing Yards Per Game",
-    subtitle = "Combine classes 2021–2025 | Regular season stats 2021–2025",
+    subtitle = "Combine classes 2016–2025 | Regular season stats 2016–2025",
     x = "Season / Combine Year",
     color = NULL,
   ) +
@@ -135,3 +155,71 @@ TCD_RBYPG_Plot <- ggplot(TCD_RBYPG_Data, aes(x = season)) +
   )
 
 TCD_RBYPG_Plot
+
+# Step 6: Tidy data for average RB 40 yard dash per year ----
+
+Combine_RB_Forty_Avg <- Combine_All |>
+  filter(pos == "RB") |>
+  filter(!is.na(forty)) |>
+  group_by(season) |>
+  summarise(
+    avg_forty = mean(forty, na.rm = TRUE)
+  )
+
+Forty_RBYPG_Data <- inner_join(Combine_RB_Forty_Avg, RB_YPG_Avg, by = "season")
+
+# Step 7: Create the plot ----
+
+# Because the forty yard dash and rushing YPG are on different scales,
+# we will use a secondary axis. We need to use a linear transformation
+# that maps one scale onto the other
+
+# Scaling parameters
+forty_range <- range(Forty_RBYPG_Data$avg_forty)
+ypg_range <- range(Forty_RBYPG_Data$avg_rb_ypg)
+
+scale_factor <- diff(forty_range) / diff(ypg_range)
+shift <- forty_range[1] - ypg_range[1] * scale_factor
+
+# Transform YPG onto the forty yard dash axis for plotting
+Forty_RBYPG_Data <- Forty_RBYPG_Data |>
+  mutate(ypg_scaled = avg_rb_ypg * scale_factor + shift)
+
+# Create the plot
+Forty_RBYPG_Plot <- ggplot(Forty_RBYPG_Data, aes(x = season)) +
+  geom_line(aes(y = avg_forty, color = "Avg 40-Yard Dash (sec)"),
+            linewidth = 1.2) +
+  geom_point(aes(y = avg_forty, color = "Avg 40-Yard Dash (sec)"),
+             size = 3) +
+  geom_line(aes(y = ypg_scaled, color = "Avg RB Rush YPG"),
+            linewidth = 1.2, linetype = "dashed") +
+  geom_point(aes(y = ypg_scaled, color = "Avg RB Rush YPG"),
+             size = 3) +
+  scale_y_continuous(
+    name = "Avg 40-Yard Dash Time (seconds)",
+    sec.axis = sec_axis(
+      transform = ~ (. - shift) / scale_factor,
+      name = "Avg RB Rushing Yards Per Game"
+    )
+  ) +
+  scale_x_continuous(breaks = 2016:2025) +
+  scale_color_manual(
+    values = c("Avg 40-Yard Dash (sec)" = "#003f5c",
+               "Avg RB Rush YPG" = "#ff6361")
+  ) +
+  labs(
+    title = "NFL Combine RB 40-Yard Dash vs. RB Rushing Yards Per Game",
+    subtitle = "Combine classes 2016–2025 | Regular season stats 2016–2025",
+    x = "Season / Combine Year",
+    color = NULL
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5, color = "grey40"),
+    legend.position = "bottom",
+    axis.title.y.left = element_text(color = "#003f5c"),
+    axis.title.y.right = element_text(color = "#ff6361")
+  )
+
+Forty_RBYPG_Plot
