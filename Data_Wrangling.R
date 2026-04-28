@@ -45,6 +45,7 @@ Combine_RB_Avg <- Combine_All |>
     # Find average time for three cone drill
     avg_cone = mean(cone, na.rm = TRUE)
   )
+
 # Step 4: Tidy Player Stats ----
 
 # Combine all player stats data frames into one
@@ -78,3 +79,59 @@ RB_YPG_Avg <- Player_Stats_All |>
 
 # Join the two summary tables
 TCD_RBYPG_Data <- inner_join(Combine_RB_Avg, RB_YPG_Avg, by = "season")
+
+# Step 5: Create the plot ----
+
+# Because the three cone drill and rushing YPG are on different scales,
+# we will use a secondary axis. We need to use a linear transformation
+# that maps one scale onto the other
+
+# Scaling parameters — adjust if your data range changes
+cone_range <- range(TCD_RBYPG_Data$avg_cone)
+ypg_range <- range(TCD_RBYPG_Data$avg_rb_ypg)
+
+scale_factor <- diff(cone_range) / diff(ypg_range)
+shift <- cone_range[1] - ypg_range[1] * scale_factor
+
+# Transform YPG onto the three cone axis for plotting
+TCD_RBYPG_Data <- TCD_RBYPG_Data |>
+  mutate(ypg_scaled = avg_rb_ypg * scale_factor + shift)
+
+# Create the plot
+TCD_RBYPG_Plot <- ggplot(TCD_RBYPG_Data, aes(x = season)) +
+  geom_line(aes(y = avg_cone, color = "Avg 3-Cone (sec)"),
+            linewidth = 1.2) +
+  geom_point(aes(y = avg_cone, color = "Avg 3-Cone (sec)"),
+             size = 3) +
+  geom_line(aes(y = ypg_scaled, color = "Avg RB Rush YPG"),
+            linewidth = 1.2, linetype = "dashed") +
+  geom_point(aes(y = ypg_scaled, color = "Avg RB Rush YPG"),
+             size = 3) +
+  scale_y_continuous(
+    name = "Avg 3-Cone Drill Time (seconds) — lower is faster",
+    sec.axis = sec_axis(
+      transform = ~ (. - shift) / scale_factor,
+      name = "Avg RB Rushing Yards Per Game"
+    )
+  ) +
+  scale_x_continuous(breaks = 2021:2025) +
+  scale_color_manual(
+    values = c("Avg 3-Cone (sec)" = "#003f5c",
+               "Avg RB Rush YPG"  = "#ff6361")
+  ) +
+  labs(
+    title = "NFL Combine RB 3-Cone Drill vs. RB Rushing Yards Per Game",
+    subtitle = "Combine classes 2021–2025 | Regular season stats 2021–2025",
+    x = "Season / Combine Year",
+    color = NULL,
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title    = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5, color = "grey40"),
+    legend.position = "bottom",
+    axis.title.y.left  = element_text(color = "#003f5c"),
+    axis.title.y.right = element_text(color = "#ff6361")
+  )
+
+TCD_RBYPG_Plot
