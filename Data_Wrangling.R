@@ -45,3 +45,36 @@ Combine_RB_Avg <- Combine_All |>
     # Find average time for three cone drill
     avg_cone = mean(cone, na.rm = TRUE)
   )
+# Step 4: Tidy Player Stats ----
+
+# Combine all player stats data frames into one
+Player_Stats_All <- bind_rows(
+  Player_Stats_2021,
+  Player_Stats_2022,
+  Player_Stats_2023,
+  Player_Stats_2024,
+  Player_Stats_2025
+)
+
+RB_YPG_Avg <- Player_Stats_All |>
+  # Keep only data from regular season and for running backs
+  filter(season_type == "REG", position == "RB") |>
+  group_by(season, player_id, player_name) |>
+  summarise(
+    games_played  = n_distinct(week),
+    total_rushing = sum(rushing_yards, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  # Exclude players with almost no carries 
+  # This avoids inflating YPG with backups who played 1 snap
+  filter(games_played >= 3) |>
+  # Calculate yard per game
+  mutate(ypg = total_rushing / games_played) |>
+  group_by(season) |>
+  summarise(
+    # Find average yards per game
+    avg_rb_ypg = mean(ypg, na.rm = TRUE)
+  )
+
+# Join the two summary tables
+TCD_RBYPG_Data <- inner_join(Combine_RB_Avg, RB_YPG_Avg, by = "season")
