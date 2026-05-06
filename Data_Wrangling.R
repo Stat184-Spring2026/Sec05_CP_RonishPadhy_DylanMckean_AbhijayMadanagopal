@@ -223,3 +223,53 @@ Forty_RBYPG_Plot <- ggplot(Forty_RBYPG_Data, aes(x = season)) +
   )
 
 Forty_RBYPG_Plot
+
+# Simple Combine_All Table for Running Backs ----
+
+library(knitr)
+library(dplyr)
+library(stringr)
+
+Combine_All_RB_Table <- Combine_All |>
+  filter(pos == "RB") |>
+  mutate(
+    height_inches = case_when(
+      # If ht looks like "5-11", convert to inches
+      str_detect(as.character(ht), "^\\d-\\d{1,2}$") ~
+        as.numeric(str_extract(as.character(ht), "^\\d")) * 12 +
+        as.numeric(str_extract(as.character(ht), "\\d{1,2}$")),
+      
+      # If ht is already numeric, keep it
+      suppressWarnings(!is.na(as.numeric(ht))) ~ as.numeric(ht),
+      
+      TRUE ~ NA_real_
+    )
+  ) |>
+  group_by(season) |>
+  summarise(
+    rb_count = n(),
+    avg_height_inches = round(mean(height_inches, na.rm = TRUE), 1),
+    avg_weight = round(mean(wt, na.rm = TRUE), 1),
+    avg_forty = round(mean(forty, na.rm = TRUE), 2),
+    avg_vertical = round(mean(vertical, na.rm = TRUE), 1),
+    avg_bench = round(mean(bench, na.rm = TRUE), 1),
+    avg_cone = round(mean(cone, na.rm = TRUE), 2),
+    .groups = "drop"
+  ) |>
+  arrange(season)
+
+kable(
+  Combine_All_RB_Table,
+  caption = "Table 1. Average NFL Combine Measurements for Running Backs by Season",
+  col.names = c(
+    "Season",
+    "RB Count",
+    "Avg Height (inches)",
+    "Avg Weight",
+    "Avg 40-Yard Dash",
+    "Avg Vertical",
+    "Avg Bench Reps",
+    "Avg 3-Cone"
+  )
+)
+
