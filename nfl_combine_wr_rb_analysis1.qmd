@@ -1,0 +1,558 @@
+---
+title: "NFL Combine Testing and Position Production Analysis"
+author: "Ronish Padhy"
+date: "May 6, 2026"
+format:
+  pdf:
+    toc: true
+    number-sections: true
+    colorlinks: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup, include=FALSE}
+# Load packages used in this analysis.
+# Install these in the Console first if needed:
+# install.packages(c("tidyverse", "ggplot2", "knitr", "stringr", "remotes"))
+# install.packages("nflreadr", repos = c("https://nflverse.r-universe.dev", getOption("repos")))
+
+library(tidyverse)
+library(nflreadr)
+library(ggplot2)
+library(knitr)
+library(stringr)
+
+# Seasons included in the analysis.
+years <- 2016:2025
+
+# Load NFL Combine data and weekly player stats.
+Combine_All <- purrr::map_dfr(years, load_combine)
+Player_Stats_All <- purrr::map_dfr(years, load_player_stats)
+
+# Convert height values into inches when the original height is stored
+# as a football-style value such as "5-11".
+clean_height_inches <- function(height_value) {
+  height_chr <- as.character(height_value)
+
+  dplyr::case_when(
+    stringr::str_detect(height_chr, "^\\d-\\d{1,2}$") ~
+      as.numeric(stringr::str_extract(height_chr, "^\\d")) * 12 +
+      as.numeric(stringr::str_extract(height_chr, "\\d{1,2}$")),
+
+    suppressWarnings(!is.na(as.numeric(height_chr))) ~
+      as.numeric(height_chr),
+
+    TRUE ~ NA_real_
+  )
+}
+
+# Create a position-level Combine summary table.
+make_combine_table <- function(position_code) {
+  Combine_All |>
+    filter(pos == position_code) |>
+    mutate(height_inches = clean_height_inches(ht)) |>
+    group_by(season) |>
+    summarise(
+      player_count = n(),
+      avg_height_inches = round(mean(height_inches, na.rm = TRUE), 1),
+      avg_weight = round(mean(wt, na.rm = TRUE), 1),
+      avg_forty = round(mean(forty, na.rm = TRUE), 2),
+      avg_vertical = round(mean(vertical, na.rm = TRUE), 1),
+      avg_bench = round(mean(bench, na.rm = TRUE), 1),
+      avg_cone = round(mean(cone, na.rm = TRUE), 2),
+      .groups = "drop"
+    ) |>
+    arrange(season)
+}
+
+WR_Combine_Table <- make_combine_table("WR")
+RB_Combine_Table <- make_combine_table("RB")
+
+# Build average receiving yards per game for WRs.
+WR_YPG_Avg <- Player_Stats_All |>
+  filter(position == "WR", season_type == "REG") |>
+  group_by(season, player_id, player_name) |>
+  summarise(
+    games_played = n_distinct(week),
+    total_rec_yards = sum(receiving_yards, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  filter(games_played >= 3) |>
+  mutate(player_ypg = total_rec_yards / games_played) |>
+  group_by(season) |>
+  summarise(avg_wr_ypg = mean(player_ypg, na.rm = TRUE), .groups = "drop")
+
+# Build average rushing yards per game for RBs.
+RB_YPG_Avg <- Player_Stats_All |>
+  filter(position == "RB", season_type == "REG") |>
+  group_by(season, player_id, player_name) |>
+  summarise(
+    games_played = n_distinct(week),
+    total_rushing = sum(rushing_yards, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  filter(games_played >= 3) |>
+  mutate(player_ypg = total_rushing / games_played) |>
+  group_by(season) |>
+  summarise(avg_rb_ypg = mean(player_ypg, na.rm = TRUE), .groups = "drop")
+
+# Helper function for dual-axis plots.
+make_dual_axis_plot <- function(data, x_var, athletic_var, production_var,
+                                athletic_label, production_label,
+                                title_text, subtitle_text) {
+
+  athletic_range <- range(data[[athletic_var]], na.rm = TRUE)
+  production_range <- range(data[[production_var]], na.rm = TRUE)
+
+  scale_factor <- diff(athletic_range) / diff(production_range)
+  shift <- athletic_range[1] - production_range[1] * scale_factor
+
+  plot_data <- data |>
+    mutate(production_scaled = .data[[production_var]] * scale_factor + shift)
+
+  plot_colors <- c("#003f5c", "#ff6361")
+  names(plot_colors) <- c(athletic_label, production_label)
+
+  ggplot(plot_data, aes(x = .data[[x_var]])) +
+    geom_line(aes(y = .data[[athletic_var]], color = athletic_label),
+              linewidth = 1.2) +
+    geom_point(aes(y = .data[[athletic_var]], color = athletic_label),
+               size = 3) +
+    geom_line(aes(y = production_scaled, color = production_label),
+              linewidth = 1.2, linetype = "dashed") +
+    geom_point(aes(y = production_scaled, color = production_label),
+               size = 3) +
+    scale_y_continuous(
+      name = athletic_label,
+      sec.axis = sec_axis(
+        transform = ~ (. - shift) / scale_factor,
+        name = production_label
+      )
+    ) +
+    scale_x_continuous(breaks = years) +
+    scale_color_manual(values = plot_colors) +
+    labs(
+      title = title_text,
+      subtitle = subtitle_text,
+      x = "Season / Combine Year",
+      color = NULL
+    ) +
+    theme_minimal(base_size = 13) +
+    theme(
+      plot.title = element_text(face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(hjust = 0.5, color = "grey40"),
+      legend.position = "bottom",
+      axis.title.y.left = element_text(color = "#003f5c"),
+      axis.title.y.right = element_text(color = "#ff6361")
+    )
+}
+
+# WR three-cone data and plot.
+Combine_WR_Cone_Avg <- Combine_All |>
+  filter(pos == "WR", !is.na(cone)) |>
+  group_by(season) |>
+  summarise(avg_cone = mean(cone, na.rm = TRUE), .groups = "drop")
+
+TCD_WRYPG_Data <- inner_join(Combine_WR_Cone_Avg, WR_YPG_Avg, by = "season")
+
+TCD_WRYPG_Plot <- make_dual_axis_plot(
+  data = TCD_WRYPG_Data,
+  x_var = "season",
+  athletic_var = "avg_cone",
+  production_var = "avg_wr_ypg",
+  athletic_label = "Avg 3-Cone Drill Time (seconds), lower is faster",
+  production_label = "Avg WR Receiving Yards Per Game",
+  title_text = "NFL Combine WR 3-Cone Drill vs. WR Receiving Yards Per Game",
+  subtitle_text = "Combine classes 2016-2025 | Regular season stats 2016-2025"
+)
+
+# WR forty-yard dash data and plot.
+Combine_WR_Forty_Avg <- Combine_All |>
+  filter(pos == "WR", !is.na(forty)) |>
+  group_by(season) |>
+  summarise(avg_forty = mean(forty, na.rm = TRUE), .groups = "drop")
+
+Forty_WRYPG_Data <- inner_join(Combine_WR_Forty_Avg, WR_YPG_Avg, by = "season")
+
+Forty_WRYPG_Plot <- make_dual_axis_plot(
+  data = Forty_WRYPG_Data,
+  x_var = "season",
+  athletic_var = "avg_forty",
+  production_var = "avg_wr_ypg",
+  athletic_label = "Avg 40-Yard Dash Time (seconds), lower is faster",
+  production_label = "Avg WR Receiving Yards Per Game",
+  title_text = "NFL Combine WR 40-Yard Dash vs. WR Receiving Yards Per Game",
+  subtitle_text = "Combine classes 2016-2025 | Regular season stats 2016-2025"
+)
+
+# RB three-cone data and plot.
+Combine_RB_Cone_Avg <- Combine_All |>
+  filter(pos == "RB", !is.na(cone)) |>
+  group_by(season) |>
+  summarise(avg_cone = mean(cone, na.rm = TRUE), .groups = "drop")
+
+TCD_RBYPG_Data <- inner_join(Combine_RB_Cone_Avg, RB_YPG_Avg, by = "season")
+
+TCD_RBYPG_Plot <- make_dual_axis_plot(
+  data = TCD_RBYPG_Data,
+  x_var = "season",
+  athletic_var = "avg_cone",
+  production_var = "avg_rb_ypg",
+  athletic_label = "Avg 3-Cone Drill Time (seconds), lower is faster",
+  production_label = "Avg RB Rushing Yards Per Game",
+  title_text = "NFL Combine RB 3-Cone Drill vs. RB Rushing Yards Per Game",
+  subtitle_text = "Combine classes 2016-2025 | Regular season stats 2016-2025"
+)
+
+# RB forty-yard dash data and plot.
+Combine_RB_Forty_Avg <- Combine_All |>
+  filter(pos == "RB", !is.na(forty)) |>
+  group_by(season) |>
+  summarise(avg_forty = mean(forty, na.rm = TRUE), .groups = "drop")
+
+Forty_RBYPG_Data <- inner_join(Combine_RB_Forty_Avg, RB_YPG_Avg, by = "season")
+
+Forty_RBYPG_Plot <- make_dual_axis_plot(
+  data = Forty_RBYPG_Data,
+  x_var = "season",
+  athletic_var = "avg_forty",
+  production_var = "avg_rb_ypg",
+  athletic_label = "Avg 40-Yard Dash Time (seconds), lower is faster",
+  production_label = "Avg RB Rushing Yards Per Game",
+  title_text = "NFL Combine RB 40-Yard Dash vs. RB Rushing Yards Per Game",
+  subtitle_text = "Combine classes 2016-2025 | Regular season stats 2016-2025"
+)
+```
+
+# Research Context and Analysis Plan
+
+This report studies whether average NFL Combine testing results for wide receivers and running backs show any visible relationship with later regular season production. The analysis uses NFL Combine data and weekly player statistics from 2016 through 2025. The main testing variables are the 40-yard dash and the three-cone drill. The main production variables are receiving yards per game for wide receivers and rushing yards per game for running backs.
+
+The goal is not to prove that one Combine drill causes better NFL production. Football production depends on role, scheme, quarterback play, offensive line quality, volume, injuries, and many other factors. The goal is more realistic: summarize the testing data, connect it to position-specific production, and look for patterns across seasons.
+
+My analysis plan was to first load Combine and player-stat data for each season, combine the yearly files into larger data frames, filter the data by position, calculate average Combine results by season, calculate player yards per game, and then compare the season-level averages in tables and graphs. I also removed players with fewer than three games played from the production averages because very small samples can make yards per game misleading.
+
+# Wide Receiver Analysis
+
+Wide receivers are usually evaluated through a mix of straight-line speed, change of direction, size, explosiveness, and actual receiving production. The 40-yard dash is useful for describing speed, while the three-cone drill gives a rough measure of short-area movement and agility. Receiving yards per game is used here because it is the most direct production measure for the position in this data context.
+
+```{r wr-table}
+kable(
+  WR_Combine_Table,
+  caption = "Table 1. Average NFL Combine Measurements for Wide Receivers by Season",
+  col.names = c(
+    "Season",
+    "WR Count",
+    "Avg Height (inches)",
+    "Avg Weight",
+    "Avg 40-Yard Dash",
+    "Avg Vertical",
+    "Avg Bench Reps",
+    "Avg 3-Cone"
+  )
+)
+```
+
+The table gives a season-by-season view of the average wide receiver Combine profile. This matters because wide receiver performance should not be judged from one drill alone. A receiver can test well in the 40-yard dash but still need route running, hands, target volume, and offensive fit to produce in games.
+
+```{r wr-cone-plot, fig.width=8, fig.height=5}
+TCD_WRYPG_Plot
+```
+
+The first wide receiver graph compares average three-cone time with average receiving yards per game. Since lower three-cone times are better, a downward movement in the drill line represents stronger average agility testing. The graph should be read as a descriptive comparison, not a direct cause-and-effect claim.
+
+```{r wr-forty-plot, fig.width=8, fig.height=5}
+Forty_WRYPG_Plot
+```
+
+The second wide receiver graph compares average 40-yard dash time with average receiving yards per game. The 40-yard dash can show speed, but receiving yards per game depends on more than speed. A receiver still needs playing time, targets, quarterback connection, and offensive usage. Because of that, this plot is best used to compare trends, not to rank individual players.
+
+# Running Back Analysis
+
+Running backs are evaluated differently from wide receivers. Speed still matters, but rushing production also depends heavily on vision, contact balance, blocking, offensive line quality, play calling, and carry volume. For this reason, the running back section uses rushing yards per game instead of receiving yards per game.
+
+```{r rb-table}
+kable(
+  RB_Combine_Table,
+  caption = "Table 2. Average NFL Combine Measurements for Running Backs by Season",
+  col.names = c(
+    "Season",
+    "RB Count",
+    "Avg Height (inches)",
+    "Avg Weight",
+    "Avg 40-Yard Dash",
+    "Avg Vertical",
+    "Avg Bench Reps",
+    "Avg 3-Cone"
+  )
+)
+```
+
+The table summarizes the average running back Combine profile by season. The three-cone drill may connect to cutting and short-area movement, while the 40-yard dash may connect to long-speed potential. Neither drill fully explains rushing production, but both give useful context for comparing Combine classes.
+
+```{r rb-cone-plot, fig.width=8, fig.height=5}
+TCD_RBYPG_Plot
+```
+
+The first running back graph compares average three-cone time with average rushing yards per game. For running backs, change of direction can matter because the position requires cutting, reacting to blocks, and creating yards through traffic. Still, rushing yards per game is strongly affected by role and team context.
+
+```{r rb-forty-plot, fig.width=8, fig.height=5}
+Forty_RBYPG_Plot
+```
+
+The second running back graph compares average 40-yard dash time with average rushing yards per game. A faster average 40-yard dash may suggest more long-speed in a Combine class, but rushing production is not only a speed statistic. This graph is useful as a season-level comparison between athletic testing and actual production.
+
+# Reflection
+
+This assignment helped me understand why reproducible documents matter. Before using Quarto, the code and written explanation can feel separate. In this document, the data loading, cleaning, tables, graphs, and written interpretation all live in one workflow. That makes the analysis easier to check and easier to update.
+
+One specific thing I learned is that data analysis depends heavily on the choices made before making a graph. For example, I filtered out players with fewer than three games played because a player with only one or two games could distort the yards-per-game average. That decision is not just a coding detail. It affects the quality of the final analysis.
+
+I also learned that the narrative is just as important as the plot. A graph can show two lines moving across time, but the writing has to explain what those lines actually mean. In this project, I had to be careful not to overclaim. The graphs compare Combine averages and production averages, but they do not prove that a faster drill time directly caused more yards per game.
+
+# GenAI Usage Appendix
+
+This appendix is included because the assignment asks for a GenAI usage appendix. Update this section based on what you actually used for the submitted analysis. Do not claim that no GenAI tools were used if a GenAI tool helped generate analysis, writing, code, or revisions.
+
+## Tool Used
+
+[Fill in tool name and version, if applicable.]
+
+## Date of Usage
+
+[Fill in date, if applicable.]
+
+## Exact Prompt(s)
+
+[Paste exact prompt text here, if applicable.]
+
+## Exact Response Text
+
+[Paste exact response text here, if applicable.]
+
+# Code Appendix
+
+The code below contains the main code used to produce the tables and graphs in this report.
+
+```{r code-appendix, eval=FALSE, echo=TRUE}
+# Step 1: Load Packages ----
+# Install these in the Console first if needed:
+# install.packages(c("tidyverse", "ggplot2", "knitr", "stringr", "remotes"))
+# install.packages("nflreadr", repos = c("https://nflverse.r-universe.dev", getOption("repos")))
+
+library(tidyverse)
+library(nflreadr)
+library(ggplot2)
+library(knitr)
+library(stringr)
+
+# Step 2: Load Data ----
+years <- 2016:2025
+
+# Load all Combine data and player stats from 2016 through 2025.
+Combine_All <- purrr::map_dfr(years, load_combine)
+Player_Stats_All <- purrr::map_dfr(years, load_player_stats)
+
+# Step 3: Clean Height Values ----
+clean_height_inches <- function(height_value) {
+  height_chr <- as.character(height_value)
+
+  dplyr::case_when(
+    stringr::str_detect(height_chr, "^\\d-\\d{1,2}$") ~
+      as.numeric(stringr::str_extract(height_chr, "^\\d")) * 12 +
+      as.numeric(stringr::str_extract(height_chr, "\\d{1,2}$")),
+
+    suppressWarnings(!is.na(as.numeric(height_chr))) ~
+      as.numeric(height_chr),
+
+    TRUE ~ NA_real_
+  )
+}
+
+# Step 4: Create Combine Summary Tables ----
+make_combine_table <- function(position_code) {
+  Combine_All |>
+    filter(pos == position_code) |>
+    mutate(height_inches = clean_height_inches(ht)) |>
+    group_by(season) |>
+    summarise(
+      player_count = n(),
+      avg_height_inches = round(mean(height_inches, na.rm = TRUE), 1),
+      avg_weight = round(mean(wt, na.rm = TRUE), 1),
+      avg_forty = round(mean(forty, na.rm = TRUE), 2),
+      avg_vertical = round(mean(vertical, na.rm = TRUE), 1),
+      avg_bench = round(mean(bench, na.rm = TRUE), 1),
+      avg_cone = round(mean(cone, na.rm = TRUE), 2),
+      .groups = "drop"
+    ) |>
+    arrange(season)
+}
+
+WR_Combine_Table <- make_combine_table("WR")
+RB_Combine_Table <- make_combine_table("RB")
+
+# Step 5: Calculate WR Receiving Yards Per Game ----
+WR_YPG_Avg <- Player_Stats_All |>
+  filter(position == "WR", season_type == "REG") |>
+  group_by(season, player_id, player_name) |>
+  summarise(
+    games_played = n_distinct(week),
+    total_rec_yards = sum(receiving_yards, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  filter(games_played >= 3) |>
+  mutate(player_ypg = total_rec_yards / games_played) |>
+  group_by(season) |>
+  summarise(avg_wr_ypg = mean(player_ypg, na.rm = TRUE), .groups = "drop")
+
+# Step 6: Calculate RB Rushing Yards Per Game ----
+RB_YPG_Avg <- Player_Stats_All |>
+  filter(position == "RB", season_type == "REG") |>
+  group_by(season, player_id, player_name) |>
+  summarise(
+    games_played = n_distinct(week),
+    total_rushing = sum(rushing_yards, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  filter(games_played >= 3) |>
+  mutate(player_ypg = total_rushing / games_played) |>
+  group_by(season) |>
+  summarise(avg_rb_ypg = mean(player_ypg, na.rm = TRUE), .groups = "drop")
+
+# Step 7: Create Dual-Axis Plot Function ----
+make_dual_axis_plot <- function(data, x_var, athletic_var, production_var,
+                                athletic_label, production_label,
+                                title_text, subtitle_text) {
+
+  athletic_range <- range(data[[athletic_var]], na.rm = TRUE)
+  production_range <- range(data[[production_var]], na.rm = TRUE)
+
+  scale_factor <- diff(athletic_range) / diff(production_range)
+  shift <- athletic_range[1] - production_range[1] * scale_factor
+
+  plot_data <- data |>
+    mutate(production_scaled = .data[[production_var]] * scale_factor + shift)
+
+  plot_colors <- c("#003f5c", "#ff6361")
+  names(plot_colors) <- c(athletic_label, production_label)
+
+  ggplot(plot_data, aes(x = .data[[x_var]])) +
+    geom_line(aes(y = .data[[athletic_var]], color = athletic_label),
+              linewidth = 1.2) +
+    geom_point(aes(y = .data[[athletic_var]], color = athletic_label),
+               size = 3) +
+    geom_line(aes(y = production_scaled, color = production_label),
+              linewidth = 1.2, linetype = "dashed") +
+    geom_point(aes(y = production_scaled, color = production_label),
+               size = 3) +
+    scale_y_continuous(
+      name = athletic_label,
+      sec.axis = sec_axis(
+        transform = ~ (. - shift) / scale_factor,
+        name = production_label
+      )
+    ) +
+    scale_x_continuous(breaks = years) +
+    scale_color_manual(values = plot_colors) +
+    labs(
+      title = title_text,
+      subtitle = subtitle_text,
+      x = "Season / Combine Year",
+      color = NULL
+    ) +
+    theme_minimal(base_size = 13) +
+    theme(
+      plot.title = element_text(face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(hjust = 0.5, color = "grey40"),
+      legend.position = "bottom",
+      axis.title.y.left = element_text(color = "#003f5c"),
+      axis.title.y.right = element_text(color = "#ff6361")
+    )
+}
+
+# Step 8: Build WR Plots ----
+Combine_WR_Cone_Avg <- Combine_All |>
+  filter(pos == "WR", !is.na(cone)) |>
+  group_by(season) |>
+  summarise(avg_cone = mean(cone, na.rm = TRUE), .groups = "drop")
+
+TCD_WRYPG_Data <- inner_join(Combine_WR_Cone_Avg, WR_YPG_Avg, by = "season")
+
+TCD_WRYPG_Plot <- make_dual_axis_plot(
+  data = TCD_WRYPG_Data,
+  x_var = "season",
+  athletic_var = "avg_cone",
+  production_var = "avg_wr_ypg",
+  athletic_label = "Avg 3-Cone Drill Time (seconds), lower is faster",
+  production_label = "Avg WR Receiving Yards Per Game",
+  title_text = "NFL Combine WR 3-Cone Drill vs. WR Receiving Yards Per Game",
+  subtitle_text = "Combine classes 2016-2025 | Regular season stats 2016-2025"
+)
+
+Combine_WR_Forty_Avg <- Combine_All |>
+  filter(pos == "WR", !is.na(forty)) |>
+  group_by(season) |>
+  summarise(avg_forty = mean(forty, na.rm = TRUE), .groups = "drop")
+
+Forty_WRYPG_Data <- inner_join(Combine_WR_Forty_Avg, WR_YPG_Avg, by = "season")
+
+Forty_WRYPG_Plot <- make_dual_axis_plot(
+  data = Forty_WRYPG_Data,
+  x_var = "season",
+  athletic_var = "avg_forty",
+  production_var = "avg_wr_ypg",
+  athletic_label = "Avg 40-Yard Dash Time (seconds), lower is faster",
+  production_label = "Avg WR Receiving Yards Per Game",
+  title_text = "NFL Combine WR 40-Yard Dash vs. WR Receiving Yards Per Game",
+  subtitle_text = "Combine classes 2016-2025 | Regular season stats 2016-2025"
+)
+
+# Step 9: Build RB Plots ----
+Combine_RB_Cone_Avg <- Combine_All |>
+  filter(pos == "RB", !is.na(cone)) |>
+  group_by(season) |>
+  summarise(avg_cone = mean(cone, na.rm = TRUE), .groups = "drop")
+
+TCD_RBYPG_Data <- inner_join(Combine_RB_Cone_Avg, RB_YPG_Avg, by = "season")
+
+TCD_RBYPG_Plot <- make_dual_axis_plot(
+  data = TCD_RBYPG_Data,
+  x_var = "season",
+  athletic_var = "avg_cone",
+  production_var = "avg_rb_ypg",
+  athletic_label = "Avg 3-Cone Drill Time (seconds), lower is faster",
+  production_label = "Avg RB Rushing Yards Per Game",
+  title_text = "NFL Combine RB 3-Cone Drill vs. RB Rushing Yards Per Game",
+  subtitle_text = "Combine classes 2016-2025 | Regular season stats 2016-2025"
+)
+
+Combine_RB_Forty_Avg <- Combine_All |>
+  filter(pos == "RB", !is.na(forty)) |>
+  group_by(season) |>
+  summarise(avg_forty = mean(forty, na.rm = TRUE), .groups = "drop")
+
+Forty_RBYPG_Data <- inner_join(Combine_RB_Forty_Avg, RB_YPG_Avg, by = "season")
+
+Forty_RBYPG_Plot <- make_dual_axis_plot(
+  data = Forty_RBYPG_Data,
+  x_var = "season",
+  athletic_var = "avg_forty",
+  production_var = "avg_rb_ypg",
+  athletic_label = "Avg 40-Yard Dash Time (seconds), lower is faster",
+  production_label = "Avg RB Rushing Yards Per Game",
+  title_text = "NFL Combine RB 40-Yard Dash vs. RB Rushing Yards Per Game",
+  subtitle_text = "Combine classes 2016-2025 | Regular season stats 2016-2025"
+)
+
+# Step 10: Display Tables and Plots ----
+kable(WR_Combine_Table)
+kable(RB_Combine_Table)
+
+TCD_WRYPG_Plot
+Forty_WRYPG_Plot
+TCD_RBYPG_Plot
+Forty_RBYPG_Plot
+```
