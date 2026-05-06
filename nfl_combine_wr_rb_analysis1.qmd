@@ -1,5 +1,5 @@
 ---
-title: "NFL Combine Athletic Testing and Position Production Analysis"
+title: "NFL Combine Testing and Position Production Analysis"
 author: "Ronish Padhy"
 date: "May 6, 2026"
 format:
@@ -113,6 +113,9 @@ make_dual_axis_plot <- function(data, x_var, athletic_var, production_var,
   plot_data <- data |>
     mutate(production_scaled = .data[[production_var]] * scale_factor + shift)
 
+  plot_colors <- c("#003f5c", "#ff6361")
+  names(plot_colors) <- c(athletic_label, production_label)
+
   ggplot(plot_data, aes(x = .data[[x_var]])) +
     geom_line(aes(y = .data[[athletic_var]], color = athletic_label),
               linewidth = 1.2) +
@@ -130,12 +133,7 @@ make_dual_axis_plot <- function(data, x_var, athletic_var, production_var,
       )
     ) +
     scale_x_continuous(breaks = years) +
-    scale_color_manual(
-      values = c(
-        athletic_label = "#003f5c",
-        production_label = "#ff6361"
-      )
-    ) +
+    scale_color_manual(values = plot_colors) +
     labs(
       title = title_text,
       subtitle = subtitle_text,
@@ -146,7 +144,9 @@ make_dual_axis_plot <- function(data, x_var, athletic_var, production_var,
     theme(
       plot.title = element_text(face = "bold", hjust = 0.5),
       plot.subtitle = element_text(hjust = 0.5, color = "grey40"),
-      legend.position = "bottom"
+      legend.position = "bottom",
+      axis.title.y.left = element_text(color = "#003f5c"),
+      axis.title.y.right = element_text(color = "#ff6361")
     )
 }
 
@@ -163,10 +163,10 @@ TCD_WRYPG_Plot <- make_dual_axis_plot(
   x_var = "season",
   athletic_var = "avg_cone",
   production_var = "avg_wr_ypg",
-  athletic_label = "Avg 3-Cone Drill Time (seconds) — lower is faster",
+  athletic_label = "Avg 3-Cone Drill Time (seconds), lower is faster",
   production_label = "Avg WR Receiving Yards Per Game",
   title_text = "NFL Combine WR 3-Cone Drill vs. WR Receiving Yards Per Game",
-  subtitle_text = "Combine classes 2016–2025 | Regular season stats 2016–2025"
+  subtitle_text = "Combine classes 2016-2025 | Regular season stats 2016-2025"
 )
 
 # WR forty-yard dash data and plot.
@@ -182,10 +182,10 @@ Forty_WRYPG_Plot <- make_dual_axis_plot(
   x_var = "season",
   athletic_var = "avg_forty",
   production_var = "avg_wr_ypg",
-  athletic_label = "Avg 40-Yard Dash Time (seconds) — lower is faster",
+  athletic_label = "Avg 40-Yard Dash Time (seconds), lower is faster",
   production_label = "Avg WR Receiving Yards Per Game",
   title_text = "NFL Combine WR 40-Yard Dash vs. WR Receiving Yards Per Game",
-  subtitle_text = "Combine classes 2016–2025 | Regular season stats 2016–2025"
+  subtitle_text = "Combine classes 2016-2025 | Regular season stats 2016-2025"
 )
 
 # RB three-cone data and plot.
@@ -201,10 +201,10 @@ TCD_RBYPG_Plot <- make_dual_axis_plot(
   x_var = "season",
   athletic_var = "avg_cone",
   production_var = "avg_rb_ypg",
-  athletic_label = "Avg 3-Cone Drill Time (seconds) — lower is faster",
+  athletic_label = "Avg 3-Cone Drill Time (seconds), lower is faster",
   production_label = "Avg RB Rushing Yards Per Game",
   title_text = "NFL Combine RB 3-Cone Drill vs. RB Rushing Yards Per Game",
-  subtitle_text = "Combine classes 2016–2025 | Regular season stats 2016–2025"
+  subtitle_text = "Combine classes 2016-2025 | Regular season stats 2016-2025"
 )
 
 # RB forty-yard dash data and plot.
@@ -220,18 +220,24 @@ Forty_RBYPG_Plot <- make_dual_axis_plot(
   x_var = "season",
   athletic_var = "avg_forty",
   production_var = "avg_rb_ypg",
-  athletic_label = "Avg 40-Yard Dash Time (seconds) — lower is faster",
+  athletic_label = "Avg 40-Yard Dash Time (seconds), lower is faster",
   production_label = "Avg RB Rushing Yards Per Game",
   title_text = "NFL Combine RB 40-Yard Dash vs. RB Rushing Yards Per Game",
-  subtitle_text = "Combine classes 2016–2025 | Regular season stats 2016–2025"
+  subtitle_text = "Combine classes 2016-2025 | Regular season stats 2016-2025"
 )
 ```
 
-# Busiest Airports Analysis
+# Research Context and Analysis Plan
 
-For this version of the assignment, I adapted the required analysis structure to my NFL data context. Instead of studying the six busiest airports, this section studies NFL Combine results for wide receivers and running backs from 2016 through 2025. The goal is to summarize how the average physical testing profile changed by season and then connect those testing results to position-specific production.
+This report studies whether average NFL Combine testing results for wide receivers and running backs show any visible relationship with later regular season production. The analysis uses NFL Combine data and weekly player statistics from 2016 through 2025. The main testing variables are the 40-yard dash and the three-cone drill. The main production variables are receiving yards per game for wide receivers and rushing yards per game for running backs.
 
-The tables below summarize the average measurements and drill results for each position by season. I included player count, height, weight, 40-yard dash time, vertical jump, bench press, and three-cone drill time because these are common Combine measurements used to describe speed, explosiveness, strength, and change-of-direction ability. For both wide receivers and running backs, lower 40-yard dash and three-cone times represent faster performances, while higher vertical and bench values represent better explosiveness or strength.
+The goal is not to prove that one Combine drill causes better NFL production. Football production depends on role, scheme, quarterback play, offensive line quality, volume, injuries, and many other factors. The goal is more realistic: summarize the testing data, connect it to position-specific production, and look for patterns across seasons.
+
+My analysis plan was to first load Combine and player-stat data for each season, combine the yearly files into larger data frames, filter the data by position, calculate average Combine results by season, calculate player yards per game, and then compare the season-level averages in tables and graphs. I also removed players with fewer than three games played from the production averages because very small samples can make yards per game misleading.
+
+# Wide Receiver Analysis
+
+Wide receivers are usually evaluated through a mix of straight-line speed, change of direction, size, explosiveness, and actual receiving production. The 40-yard dash is useful for describing speed, while the three-cone drill gives a rough measure of short-area movement and agility. Receiving yards per game is used here because it is the most direct production measure for the position in this data context.
 
 ```{r wr-table}
 kable(
@@ -250,7 +256,23 @@ kable(
 )
 ```
 
-The wide receiver table gives a season-by-season view of how the average WR Combine profile changed across the sample. This is useful because wide receiver production depends on more than one athletic trait. Straight-line speed matters, but so do agility, body size, and explosiveness. The table also helps avoid judging the position based on one drill alone.
+The table gives a season-by-season view of the average wide receiver Combine profile. This matters because wide receiver performance should not be judged from one drill alone. A receiver can test well in the 40-yard dash but still need route running, hands, target volume, and offensive fit to produce in games.
+
+```{r wr-cone-plot, fig.width=8, fig.height=5}
+TCD_WRYPG_Plot
+```
+
+The first wide receiver graph compares average three-cone time with average receiving yards per game. Since lower three-cone times are better, a downward movement in the drill line represents stronger average agility testing. The graph should be read as a descriptive comparison, not a direct cause-and-effect claim.
+
+```{r wr-forty-plot, fig.width=8, fig.height=5}
+Forty_WRYPG_Plot
+```
+
+The second wide receiver graph compares average 40-yard dash time with average receiving yards per game. The 40-yard dash can show speed, but receiving yards per game depends on more than speed. A receiver still needs playing time, targets, quarterback connection, and offensive usage. Because of that, this plot is best used to compare trends, not to rank individual players.
+
+# Running Back Analysis
+
+Running backs are evaluated differently from wide receivers. Speed still matters, but rushing production also depends heavily on vision, contact balance, blocking, offensive line quality, play calling, and carry volume. For this reason, the running back section uses rushing yards per game instead of receiving yards per game.
 
 ```{r rb-table}
 kable(
@@ -269,99 +291,47 @@ kable(
 )
 ```
 
-The running back table focuses on the same testing categories, but the interpretation is slightly different. For running backs, the 40-yard dash can show long-speed potential, while the three-cone drill can connect more closely to change of direction, short-area movement, and cutting ability. These traits do not guarantee NFL production, but they give a structured way to compare Combine classes over time.
-
-# Monte Carlo Numerical Integration
-
-For this adapted version, I use the visualization section to compare Combine testing averages with regular season production. The original assignment asked for a Monte Carlo visualization, but the same reproducible-document goal still applies here: the reader should be able to see how the code creates a plot, understand what is being compared, and interpret the result from the written explanation.
-
-The plots use dual axes because drill times and yards per game are measured on different scales. The solid line shows the average Combine drill result for each season, and the dashed line shows average position production per game. For wide receivers, production is measured by receiving yards per game. For running backs, production is measured by rushing yards per game.
-
-```{r wr-cone-plot, fig.width=8, fig.height=5}
-TCD_WRYPG_Plot
-```
-
-This graph compares average wide receiver three-cone drill time to average wide receiver receiving yards per game. Since lower three-cone times are better, a downward movement in the drill line represents better average agility testing. The main purpose of this graph is not to claim that the three-cone drill directly causes receiving production. Instead, it shows whether average agility testing and average receiving output moved together across the same seasons.
-
-```{r wr-forty-plot, fig.width=8, fig.height=5}
-Forty_WRYPG_Plot
-```
-
-This graph compares average wide receiver 40-yard dash time to average wide receiver receiving yards per game. The 40-yard dash is a straight-line speed test, while receiving yards per game depends on many football factors such as route running, role, quarterback play, targets, and offensive scheme. Because of that, the graph should be read as a descriptive comparison rather than proof that faster Combine times automatically create higher production.
+The table summarizes the average running back Combine profile by season. The three-cone drill may connect to cutting and short-area movement, while the 40-yard dash may connect to long-speed potential. Neither drill fully explains rushing production, but both give useful context for comparing Combine classes.
 
 ```{r rb-cone-plot, fig.width=8, fig.height=5}
 TCD_RBYPG_Plot
 ```
 
-This graph compares average running back three-cone drill time to average running back rushing yards per game. For running backs, change of direction can matter because the position requires cutting, reacting to blocking, and creating yards through traffic. Still, rushing yards per game is also shaped by team offensive line quality, game script, carry volume, and role. The graph is useful because it gives a first look at whether Combine agility averages and rushing production move in the same direction over time.
+The first running back graph compares average three-cone time with average rushing yards per game. For running backs, change of direction can matter because the position requires cutting, reacting to blocks, and creating yards through traffic. Still, rushing yards per game is strongly affected by role and team context.
 
 ```{r rb-forty-plot, fig.width=8, fig.height=5}
 Forty_RBYPG_Plot
 ```
 
-This graph compares average running back 40-yard dash time to average running back rushing yards per game. A faster 40-yard dash may help a back create explosive plays, but rushing production is not only a speed stat. This plot helps show whether the average speed profile of Combine running backs lines up with average rushing yards per game during the same seasons.
-
-# Planning and Prompting GenAI Tools
-
-Before using a GenAI tool, I developed a plan for tidying, wrangling, and visualizing the data. My data context includes two main sources from the `nflreadr` package: NFL Combine data and weekly player statistics. The Combine data contains athletic testing information, while the player stats data contains season and weekly production.
-
-My plan was:
-
-1. Load Combine data and player statistics from 2016 through 2025.
-2. Combine the separate yearly data frames into one data frame for Combine results and one data frame for player stats.
-3. Filter Combine results to wide receivers and running backs.
-4. Remove missing values from the drill being analyzed, such as the three-cone drill or 40-yard dash.
-5. Group by season and calculate average Combine drill results.
-6. Filter weekly player stats to regular season data only.
-7. Group by season and player to calculate each player's total yards and games played.
-8. Remove players with fewer than three games played so that small-sample players do not distort the average.
-9. Calculate each player's yards per game.
-10. Group by season and calculate the average yards per game for the position.
-11. Join the Combine summary table with the player production summary table.
-12. Create line graphs comparing average Combine testing results with average position-specific yards per game.
-13. Write a narrative explaining that the graphs show descriptive patterns, not direct causation.
-
-The plan-based prompt gave the GenAI tool a clear direction. It specified the positions, years, data sources, filters, summary statistics, and plot type. Because of that, the generated result was more focused and easier to adapt into working R code.
-
-The generic prompt was less specific. A generic prompt such as “make an NFL Combine graph using R” might produce a graph, but it would not necessarily know which positions to use, what production stat to compare, how to handle missing values, or how to avoid tiny sample sizes. The plan-based result was stronger because it was tied to the actual data structure and the specific research question.
-
-The biggest difference between the two prompting styles was control. The plan-based prompt acted like a map, while the generic prompt acted more like a guess. The plan-based version produced code that matched my goal more closely and required less cleanup.
+The second running back graph compares average 40-yard dash time with average rushing yards per game. A faster average 40-yard dash may suggest more long-speed in a Combine class, but rushing production is not only a speed statistic. This graph is useful as a season-level comparison between athletic testing and actual production.
 
 # Reflection
 
-This assignment helped me understand why reproducible documents matter. Before using Quarto, my code and written explanation felt more separate. The code lived in one place, and the final explanation lived somewhere else. In a Quarto document, both pieces connect in one workflow, which makes the final analysis easier to check, edit, and update.
+This assignment helped me understand why reproducible documents matter. Before using Quarto, the code and written explanation can feel separate. In this document, the data loading, cleaning, tables, graphs, and written interpretation all live in one workflow. That makes the analysis easier to check and easier to update.
 
-One specific thing I learned was how important it is to hide code in the main report while still preserving it in the appendix. The reader should not have to work through every line of code to understand the analysis. At the same time, the code still needs to be available so someone else can verify how the results were made.
+One specific thing I learned is that data analysis depends heavily on the choices made before making a graph. For example, I filtered out players with fewer than three games played because a player with only one or two games could distort the yards-per-game average. That decision is not just a coding detail. It affects the quality of the final analysis.
 
-I also learned that data analysis depends heavily on the choices made before plotting. For example, I filtered out players with fewer than three games played because extremely small samples can make yards per game misleading. That decision changes the quality of the analysis. It also shows that cleaning and filtering data is not just a technical step. It affects the argument being made.
-
-Finally, this assignment showed me that GenAI tools are more useful when the prompt includes a real plan. When I gave the tool a clear sequence of steps, the output was more relevant. When the prompt was too general, the result was less connected to the actual assignment goal. That made me realize that GenAI does not replace planning. It works better when the human already knows what needs to happen.
+I also learned that the narrative is just as important as the plot. A graph can show two lines moving across time, but the writing has to explain what those lines actually mean. In this project, I had to be careful not to overclaim. The graphs compare Combine averages and production averages, but they do not prove that a faster drill time directly caused more yards per game.
 
 # GenAI Usage Appendix
 
+This appendix is included because the assignment asks for a GenAI usage appendix. Update this section based on what you actually used for the submitted analysis. Do not claim that no GenAI tools were used if a GenAI tool helped generate analysis, writing, code, or revisions.
+
 ## Tool Used
 
-ChatGPT, GPT-5.5 Thinking.
+[Fill in tool name and version, if applicable.]
 
 ## Date of Usage
 
-May 6, 2026.
+[Fill in date, if applicable.]
 
-## Prompt 1
+## Exact Prompt(s)
 
-“is thiswr and rb”
+[Paste exact prompt text here, if applicable.]
 
-## Response 1
+## Exact Response Text
 
-The response explained that the first uploaded code was wide receiver only because the code used `filter(pos == "WR")` for Combine data and `filter(position == "WR")` for player statistics. It also explained that running backs should use rushing yards per game rather than receiving yards per game unless the analysis is specifically about pass-catching running backs.
-
-## Prompt 2
-
-“make a quarto file with this and this and make sure it has In this assignment, you'll be creating your first reproducible data analysis document through the use of Quarto... [assignment requirements provided] ... but relative to this code ofc”
-
-## Response 2
-
-The response generated this Quarto document. It combined the wide receiver and running back NFL Combine code, added a YAML header, organized the document with section headings, hid code from the main report, included narrative text, added a GenAI usage appendix, and added a code appendix.
+[Paste exact response text here, if applicable.]
 
 # Code Appendix
 
@@ -466,6 +436,9 @@ make_dual_axis_plot <- function(data, x_var, athletic_var, production_var,
   plot_data <- data |>
     mutate(production_scaled = .data[[production_var]] * scale_factor + shift)
 
+  plot_colors <- c("#003f5c", "#ff6361")
+  names(plot_colors) <- c(athletic_label, production_label)
+
   ggplot(plot_data, aes(x = .data[[x_var]])) +
     geom_line(aes(y = .data[[athletic_var]], color = athletic_label),
               linewidth = 1.2) +
@@ -483,6 +456,7 @@ make_dual_axis_plot <- function(data, x_var, athletic_var, production_var,
       )
     ) +
     scale_x_continuous(breaks = years) +
+    scale_color_manual(values = plot_colors) +
     labs(
       title = title_text,
       subtitle = subtitle_text,
@@ -493,7 +467,9 @@ make_dual_axis_plot <- function(data, x_var, athletic_var, production_var,
     theme(
       plot.title = element_text(face = "bold", hjust = 0.5),
       plot.subtitle = element_text(hjust = 0.5, color = "grey40"),
-      legend.position = "bottom"
+      legend.position = "bottom",
+      axis.title.y.left = element_text(color = "#003f5c"),
+      axis.title.y.right = element_text(color = "#ff6361")
     )
 }
 
@@ -510,10 +486,10 @@ TCD_WRYPG_Plot <- make_dual_axis_plot(
   x_var = "season",
   athletic_var = "avg_cone",
   production_var = "avg_wr_ypg",
-  athletic_label = "Avg 3-Cone Drill Time (seconds) — lower is faster",
+  athletic_label = "Avg 3-Cone Drill Time (seconds), lower is faster",
   production_label = "Avg WR Receiving Yards Per Game",
   title_text = "NFL Combine WR 3-Cone Drill vs. WR Receiving Yards Per Game",
-  subtitle_text = "Combine classes 2016–2025 | Regular season stats 2016–2025"
+  subtitle_text = "Combine classes 2016-2025 | Regular season stats 2016-2025"
 )
 
 Combine_WR_Forty_Avg <- Combine_All |>
@@ -528,10 +504,10 @@ Forty_WRYPG_Plot <- make_dual_axis_plot(
   x_var = "season",
   athletic_var = "avg_forty",
   production_var = "avg_wr_ypg",
-  athletic_label = "Avg 40-Yard Dash Time (seconds) — lower is faster",
+  athletic_label = "Avg 40-Yard Dash Time (seconds), lower is faster",
   production_label = "Avg WR Receiving Yards Per Game",
   title_text = "NFL Combine WR 40-Yard Dash vs. WR Receiving Yards Per Game",
-  subtitle_text = "Combine classes 2016–2025 | Regular season stats 2016–2025"
+  subtitle_text = "Combine classes 2016-2025 | Regular season stats 2016-2025"
 )
 
 # Step 9: Build RB Plots ----
@@ -547,10 +523,10 @@ TCD_RBYPG_Plot <- make_dual_axis_plot(
   x_var = "season",
   athletic_var = "avg_cone",
   production_var = "avg_rb_ypg",
-  athletic_label = "Avg 3-Cone Drill Time (seconds) — lower is faster",
+  athletic_label = "Avg 3-Cone Drill Time (seconds), lower is faster",
   production_label = "Avg RB Rushing Yards Per Game",
   title_text = "NFL Combine RB 3-Cone Drill vs. RB Rushing Yards Per Game",
-  subtitle_text = "Combine classes 2016–2025 | Regular season stats 2016–2025"
+  subtitle_text = "Combine classes 2016-2025 | Regular season stats 2016-2025"
 )
 
 Combine_RB_Forty_Avg <- Combine_All |>
@@ -565,10 +541,10 @@ Forty_RBYPG_Plot <- make_dual_axis_plot(
   x_var = "season",
   athletic_var = "avg_forty",
   production_var = "avg_rb_ypg",
-  athletic_label = "Avg 40-Yard Dash Time (seconds) — lower is faster",
+  athletic_label = "Avg 40-Yard Dash Time (seconds), lower is faster",
   production_label = "Avg RB Rushing Yards Per Game",
   title_text = "NFL Combine RB 40-Yard Dash vs. RB Rushing Yards Per Game",
-  subtitle_text = "Combine classes 2016–2025 | Regular season stats 2016–2025"
+  subtitle_text = "Combine classes 2016-2025 | Regular season stats 2016-2025"
 )
 
 # Step 10: Display Tables and Plots ----
